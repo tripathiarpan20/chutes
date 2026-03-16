@@ -35,6 +35,13 @@ async def _deploy(
     with open(module.__file__, "r") as infile:
         code = infile.read()
     config = get_config()
+    def _schema(obj):
+        if hasattr(obj, "model_json_schema"):
+            return obj.model_json_schema()
+        if hasattr(obj, "schema"):
+            return obj.schema()
+        return obj
+
     request_body = {
         "name": chute.name,
         "tagline": chute.tagline,
@@ -64,10 +71,10 @@ async def _deploy(
                 "public_api_method": cord._public_api_method,
                 "stream": cord._stream,
                 "function": cord._func.__name__,
-                "input_schema": cord.input_schema,
-                "output_schema": cord.output_schema,
+                "input_schema": _schema(cord.input_schema),
+                "output_schema": _schema(cord.output_schema),
                 "output_content_type": cord.output_content_type,
-                "minimal_input_schema": cord.minimal_input_schema,
+                "minimal_input_schema": _schema(cord.minimal_input_schema),
                 "passthrough": cord._passthrough,
             }
             for cord in chute._cords
