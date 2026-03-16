@@ -56,6 +56,13 @@ class Chute(FastAPI):
         super().__init__(**kwargs)
         self._username = username
         self._name = name
+
+        if not readme and os.path.exists("README.md"):
+            try:
+                with open("README.md", "r") as f:
+                    readme = f.read()
+            except Exception:
+                pass
         self._readme = readme
         self._tagline = tagline
         self._uid = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{username}::chute::{name}"))

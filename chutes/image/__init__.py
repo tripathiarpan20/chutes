@@ -1,4 +1,5 @@
 import re
+import os
 import uuid
 from typing import List
 from chutes.image.directive.base_image import FROM
@@ -24,6 +25,13 @@ class Image:
         self._tag = None
         self.name = name
         self.tag = tag
+
+        if not readme and os.path.exists("README.md"):
+            try:
+                with open("README.md", "r") as f:
+                    readme = f.read()
+            except Exception:
+                pass
         self.readme = readme
         self.username = username
         self._uid = str(
