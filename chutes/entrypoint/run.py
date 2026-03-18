@@ -93,6 +93,7 @@ from chutes.entrypoint._shared import (
 )
 from chutes.entrypoint.ssh import setup_ssh_access
 from chutes.chute import ChutePack, Job
+from chutes.chute.cord import init_user_code_executor
 from chutes.util.context import is_local, is_remote
 from chutes.cfsv_wrapper import get_cfsv
 
@@ -1676,9 +1677,7 @@ class GraValMiddleware(BaseHTTPMiddleware):
                             _conn_stats.requests_in_flight.pop(request.request_id, None)
                         except Exception as exc:
                             if _is_disconnect_error(exc):
-                                logger.info(
-                                    "Body iterator closed after client disconnect"
-                                )
+                                logger.info("Body iterator closed after client disconnect")
                                 _conn_stats.requests_in_flight.pop(request.request_id, None)
                                 return
                             logger.warning(f"Unhandled exception in body iterator: {exc}")
@@ -2567,6 +2566,7 @@ def run_chute(
                 bind_host = host or "0.0.0.0"
                 bind_port = port or 8000
                 chute_concurrency = max(1, int(getattr(chute, "concurrency", 1) or 1))
+                init_user_code_executor(chute_concurrency)
                 h2_max_streams = max(256, chute_concurrency * 8)
 
                 config = HypercornConfig()

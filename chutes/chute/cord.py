@@ -35,10 +35,21 @@ PATH_RE = re.compile(r"^(/[a-z0-9_]+[a-z0-9-_]*)+$")
 # This keeps health-check / ping endpoints responsive even when user code
 # blocks for minutes — including "async def" functions that never actually
 # await anything (a common pattern in ML inference code).
-_user_code_executor = ThreadPoolExecutor(
-    max_workers=int(os.environ.get("CHUTES_USER_CODE_THREADS", 4)),
-    thread_name_prefix="chute-user",
-)
+#
+# Initialized lazily via init_user_code_executor() once the chute's
+# concurrency value is known.
+_user_code_executor: ThreadPoolExecutor | None = None
+
+
+def init_user_code_executor(concurrency: int):
+    """Create the user-code thread pool sized to the chute's concurrency."""
+    global _user_code_executor
+    max_workers = max(4, concurrency + 1)
+    _user_code_executor = ThreadPoolExecutor(
+        max_workers=max_workers,
+        thread_name_prefix="chute-user",
+    )
+    logger.info(f"Initialized user-code thread pool with {max_workers} workers")
 
 
 def _is_async(func) -> bool:
@@ -56,6 +67,7 @@ class _CancelHandle:
     invocation before the cancellation takes effect — that is an inherent
     limitation of Python threads.
     """
+
     __slots__ = ("_inner_loop", "_inner_task")
 
     def __init__(self):
@@ -87,9 +99,11 @@ def _run_user_coro(coro, cancel_handle=None):
         cancel_handle._inner_loop = loop
     try:
         if cancel_handle is not None:
+
             async def _wrapper():
                 cancel_handle._inner_task = asyncio.current_task()
                 return await coro
+
             return loop.run_until_complete(_wrapper())
         return loop.run_until_complete(coro)
     finally:
@@ -370,7 +384,7 @@ class Cord:
         # Set (if needed) timeout.
         timeout = None
         if self._is_sglang_passthrough():
-            timeout = aiohttp.ClientTimeout(connect=5.0, total=None)
+            timeout = aiohttp.ClientTimeout(connect=30.0, total=None)
         else:
             total_timeout = kwargs.pop("timeout", 1800)
             timeout = aiohttp.ClientTimeout(connect=5.0, total=total_timeout)

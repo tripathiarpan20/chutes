@@ -2,7 +2,6 @@ from abc import abstractmethod
 import asyncio
 import base64
 from contextlib import asynccontextmanager
-from functools import lru_cache
 import hashlib
 import os
 import ssl
@@ -384,7 +383,6 @@ class TeeEvidenceService:
 
 
 class TeeGpuVerifier(GpuVerifier):
-
     @property
     def validator_url(self) -> str:
         parsed = urlparse(self._url)
