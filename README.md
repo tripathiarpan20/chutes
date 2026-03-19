@@ -152,9 +152,7 @@ To acknowledge and accept the fee you must pass `--accept-fee`, e.g. `chutes dep
 
 ### Deployment fee
 
-You are charged a one-time deployment fee per chute, equivalent to 3 times the hourly rate based on the node selector (meaning, `gpu_count` * cheapest compatible GPU type hourly rate). There is no deployment fee for any updates to existing chutes.
-
-For example, if the `node_selector` has `gpu_count=1` and nothing else, the cheapest compatible GPU is $0.1/hr, so your deployment fee is $0.3.
+You are charged a one-time deployment fee per chute, equivalent to 3 times the hourly rate based on the node selector (meaning, `gpu_count` * cheapest compatible GPU type hourly rate). There is no deployment fee for any updates to existing chutes. See https://api.chutes.ai/pricing for current GPU rates (subject to change).
 
 ### Node selector configuration
 
@@ -164,18 +162,22 @@ node_selector=NodeSelector(
     gpu_count=1,
     # All options.
     # gpu_count: int = Field(1, ge=1, le=8)
-    # min_vram_gb_per_gpu: int = Field(16, ge=16, le=80)
+    # min_vram_gb_per_gpu: int = Field(16, ge=16, le=140)
+    # max_hourly_price_per_gpu: Optional[float] = Field(None, gt=0, lt=10)
     # include: Optional[List[str]] = None
     # exclude: Optional[List[str]] = None
 ),
 ```
 
-The most important fields are `gpu_count` and `min_vram_gb_per_gpu`.  If you wish to include specific GPUs, you can do so, where the `include` (or `exclude`) fields are the short identifier per model, e.g. `"a6000"`, `"a100"`, etc.  [All supported GPUs and their short identifiers](https://github.com/rayonlabs/chutes-api/blob/main/api/gpu.py)
+The most important fields are `gpu_count` and `min_vram_gb_per_gpu`.  If you wish to include specific GPUs, you can do so, where the `include` (or `exclude`) fields are the short identifier per model, e.g. `"a6000"`, `"a100"`, etc.  [All supported GPUs, their short identifiers, and current pricing](https://api.chutes.ai/pricing)
+
+You can also set `max_hourly_price_per_gpu` to cap the per-GPU hourly rate. For example, `max_hourly_price_per_gpu=1.50` will exclude any GPU type that costs more than $1.50/hr. This is useful when you want to control costs without having to manually specify `include`/`exclude` lists. The value must be greater than 0 and less than 10.
 
 ### Scaling & billing of user-deployed chutes
 
-All user-created chutes are charged at the standard hourly (per gpu, based on your `gpu_count` value in node selector), based on the cheapest compatible GPU type in the `node_selector` definition: https://api.chutes.ai/pricing
-For example, if your chute can run on either a100 or h100, you are charged as though all instances are a100, even if it happens to deploy on h100s.
+All user-created chutes are billed based on the actual GPU type each instance is running on: https://api.chutes.ai/pricing
+
+For example, if your chute's node selector allows both a100 and h100, an instance running on an a100 is billed at the a100 hourly rate, and an instance running on an h100 is billed at the h100 hourly rate.
 
 You can configure how much the chute will scale up, how quickly it scales up, and how quickly to spin down with the following flags:
 ```python
@@ -204,29 +206,29 @@ The number of seconds to wait after the last request (per instance) before shutt
 
 Deployment fee: You are charged a one-time deployment fee per chute, equivalent to 3 times the hourly rate based on the node selector (meaning, `gpu_count` * cheapest compatible GPU type hourly rate). No deployment fee for any updates to existing chutes.
 
-You are charged the standard hourly rate while any instance is hot, based on your criteria specified above, up through last request timestamp + `shutdown_after_seconds`
+You are charged the actual hourly rate of the GPU your instance is running on while any instance is hot, up through last request timestamp + `shutdown_after_seconds`. See https://api.chutes.ai/pricing for current GPU rates (subject to change).
 
 You are not charged for "cold start" times (e.g., downloading the model, downloading the chute image, etc.).  You are, however, charged for the `shutdown_after_seconds` seconds of compute while the instance is hot but not actively being called, because it keeps the instance hot.
 
-For example:
-- deploy a chute at 12:00:00 (new chute, one time node-selector based deployment fee, let's say a single 3090 at $0.12/hr = $0.36 total fee)
+For example, suppose the GPU your instance lands on costs $0.50/hr (see https://api.chutes.ai/pricing for current rates):
+- deploy a chute at 12:00:00 (new chute, one time deployment fee = 3 * $0.50 = $1.50)
   - `max_instances` set to 1, `shutdown_after_seconds` set to 300
 - send requests to the chute and/or call warmup endpoint: 12:00:01 (no charge)
-- first instance becomes hot and ready for use: 12:00:30 (billing at $0.12/hr starts here)
+- first instance becomes hot and ready for use: 12:00:30 (billing at $0.50/hr starts here)
 - continuously send requests to the instance (no per-request inference charges)
 - stop sending requests at 12:05:00
   - triggers the instance shutdown timer based on `shutdown_after_seconds` for 5 minutes...
-- instance chutes down 12:10:00 (billing stops here)
+- instance shuts down 12:10:00 (billing stops here)
 
-Total charges are: $0.36 deployment fee + 5 minutes at $0.12/hr of active compute + 5 minutes `shutdown_after_seconds` = $0.38
+Total charges are: $1.50 deployment fee + 5 minutes at $0.50/hr of active compute + 5 minutes `shutdown_after_seconds` = $1.58
 
 Now, suppose you want to use that chute again:
 - start requests at 13:00:00
-- instance becomes hot at 13:00:30 (billing starts at $0.12/hr here)
+- instance becomes hot at 13:00:30 (billing starts at $0.50/hr here)
 - stop requests at 13:05:30
 - instance stays hot due to `shutdown_after_seconds` for 5 minutes
 
-Total additional charges = 5 minutes active compute + 5 minute shutdown delay = 10 minutes @ $0.12/hr = $0.02
+Total additional charges = 5 minutes active compute + 5 minute shutdown delay = 10 minutes @ $0.50/hr = $0.08
 
 *If you share a chute with another user, they also pay standard rates for usage on the chute!*
 
@@ -275,7 +277,8 @@ chute = Chute(
         gpu_count=1,
         # All options.
         # gpu_count: int = Field(1, ge=1, le=8)
-        # min_vram_gb_per_gpu: int = Field(16, ge=16, le=80)
+        # min_vram_gb_per_gpu: int = Field(16, ge=16, le=140)
+        # max_hourly_price_per_gpu: Optional[float] = Field(None, gt=0, lt=10)
         # include: Optional[List[str]] = None
         # exclude: Optional[List[str]] = None
     ),
