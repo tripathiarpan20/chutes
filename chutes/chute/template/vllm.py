@@ -427,6 +427,9 @@ def build_vllm_chute(
         env["SGL_REVISION"] = revision
         env["HF_HUB_OFFLINE"] = "1"
         env["TRANSFORMERS_OFFLINE"] = "1"
+        env["VLLM_NO_USAGE_STATS"] = "1"
+        env["VLLM_DO_NOT_TRACK"] = "1"
+        env["DO_NOT_TRACK"] = "1"
         if use_mtls:
             env["VLLM_SSL_KEYFILE_PEM"] = certs["server_key_pem"].decode()
             env["VLLM_SSL_CERTFILE_PEM"] = certs["server_cert_pem"].decode()
