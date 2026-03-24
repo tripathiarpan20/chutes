@@ -241,6 +241,9 @@ _public_api_path_map: dict[tuple[str, str, bool], str] = {}
 # Only cords with a public_api_path are eligible.
 _e2e_allowed_paths: set[str] = set()
 
+# Single-chute runtime metadata used by the E2E middleware.
+_active_standard_template: str | None = None
+
 
 @lru_cache(maxsize=1)
 def get_aegis_ref():
@@ -1551,10 +1554,7 @@ class GraValMiddleware(BaseHTTPMiddleware):
                     if "content-length" in response.headers:
                         del response.headers["content-length"]
                     response.media_type = "text/event-stream"
-                    # Determine if this is a vLLM/sglang chute for usage extraction
-                    is_vllm = (
-                        getattr(locals().get("chute_obj"), "standard_template", None) == "vllm"
-                    )
+                    is_vllm = _active_standard_template == "vllm"
 
                     async def e2e_wrapped_iterator():
                         try:
@@ -2266,6 +2266,8 @@ def run_chute(
         chute_module, chute = load_chute(chute_ref_str=chute_ref_str, config_path=None, debug=debug)
         logger.info("[aegis-debug] load_chute complete module={}", chute_module.__name__)
         chute = chute.chute if isinstance(chute, ChutePack) else chute
+        global _active_standard_template
+        _active_standard_template = getattr(chute, "_standard_template", None)
 
         # Sanity check: only warn if chute explicitly defines lock_modules and it
         # disagrees with the JWT value. If the chute doesn't define it (old code),
