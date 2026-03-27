@@ -53,10 +53,12 @@ def sign_request(payload: Dict[str, Any] | str | None = None, purpose: str = Non
     if payload is not None:
         if isinstance(payload, dict):
             headers["Content-Type"] = "application/json"
+
             def _default(obj):
                 if inspect.isclass(obj) and issubclass(obj, BaseModel):
                     return obj.model_json_schema()
                 raise TypeError(f"Type is not JSON serializable: {type(obj).__name__}")
+
             payload_string = json.dumps(payload, default=_default)
         else:
             payload_string = payload

@@ -121,6 +121,26 @@ def _run_user_coro(coro, cancel_handle=None):
         loop.close()
 
 
+def _resolve_schema(schema, minimal: bool = False):
+    """Convert a schema argument to a JSON-serializable dict.
+
+    If *schema* is a Pydantic BaseModel class it is converted via
+    ``SchemaExtractor.get_minimal_schema`` (when *minimal* is True) or
+    ``model_json_schema``.  Plain dicts are passed through as-is.
+    """
+    if schema is None:
+        return None
+    if inspect.isclass(schema) and issubclass(schema, BaseModel):
+        if minimal:
+            return SchemaExtractor.get_minimal_schema(schema)
+        return schema.model_json_schema()
+    if isinstance(schema, dict):
+        return schema
+    raise TypeError(
+        f"Schema must be a Pydantic BaseModel class or a dict, got {type(schema).__name__}"
+    )
+
+
 class Cord:
     def __init__(
         self,
@@ -164,21 +184,16 @@ class Cord:
         self._config = None
         self._sglang_passthrough = sglang_passthrough
         self.input_models = (
-            [input_schema] if input_schema and hasattr(input_schema, "__fields__") else None
-        )
-        self.input_schema = (
-            SchemaExtractor.get_minimal_schema(input_schema) if input_schema else None
-        )
-        self.minimal_input_schema = (
-            SchemaExtractor.get_minimal_schema(minimal_input_schema)
-            if minimal_input_schema
+            [input_schema]
+            if input_schema
+            and inspect.isclass(input_schema)
+            and issubclass(input_schema, BaseModel)
             else None
         )
+        self.input_schema = _resolve_schema(input_schema, minimal=True)
+        self.minimal_input_schema = _resolve_schema(minimal_input_schema, minimal=True)
         self.output_content_type = output_content_type
-        if inspect.isclass(output_schema) and issubclass(output_schema, BaseModel):
-            self.output_schema = output_schema.model_json_schema()
-        else:
-            self.output_schema = output_schema
+        self.output_schema = _resolve_schema(output_schema)
 
     @property
     def path(self):
