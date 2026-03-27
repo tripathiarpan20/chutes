@@ -2,7 +2,7 @@ from functools import lru_cache
 import os
 from loguru import logger
 from pathlib import Path
-from configparser import ConfigParser, NoSectionError
+from configparser import ConfigParser, NoSectionError, NoOptionError
 from chutes.constants import CHUTES_DIR
 from chutes.exception import AuthenticationRequired, NotConfigured
 from dataclasses import dataclass
@@ -44,7 +44,14 @@ def get_generic_config() -> GenericConfig:
 def get_config() -> Config:
     global _config
     if _config is None:
-        # def load_config(self):
+        raw_config = ConfigParser()
+        auth_config = AuthConfig(
+            user_id=None,
+            username=None,
+            hotkey_seed=None,
+            hotkey_name=None,
+            hotkey_ss58address=None,
+        )
         if not os.path.exists(CONFIG_PATH):
             os.makedirs(os.path.dirname(os.path.abspath(CONFIG_PATH)), exist_ok=True)
             if not ALLOW_MISSING:
@@ -53,7 +60,6 @@ def get_config() -> Config:
                 )
         else:
             logger.info(f"Loading chutes config from {CONFIG_PATH}...")
-            raw_config = ConfigParser()
             raw_config.read(CONFIG_PATH)
 
             try:
@@ -65,13 +71,17 @@ def get_config() -> Config:
                     hotkey_ss58address=raw_config.get("auth", "hotkey_ss58address"),
                 )
 
-            except NoSectionError:
+            except (NoSectionError, NoOptionError):
                 if not ALLOW_MISSING:
                     raise AuthenticationRequired(
                         f"Please ensure you have an [auth] section defined in {CONFIG_PATH} with 'hotkey_seed', 'hotkey_name', and 'hotkey_ss58address' values"
                     )
 
-        api_base_url = raw_config.get("api", "base_url")
+        api_base_url = None
+        try:
+            api_base_url = raw_config.get("api", "base_url")
+        except (NoSectionError, NoOptionError):
+            pass
         if not api_base_url:
             api_base_url = os.getenv("CHUTES_API_URL", "https://api.chutes.ai")
         generic_config = GenericConfig(api_base_url=api_base_url)
